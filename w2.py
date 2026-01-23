@@ -114,7 +114,7 @@ async def start(msg: types.Message):
     save_json(USERS_FILE, users)
 
     await msg.answer(
-        "👋 Xush kelibsiz!",
+        "👋Xush kelibsiz!",
         reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
     )
 
