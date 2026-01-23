@@ -12,7 +12,7 @@ from telethon.tl.types import User
 from telethon.errors import SessionPasswordNeededError
 
 # ================== SOZLAMALAR ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "8568599127:AAE5aWe_lp9d7bn3NqivgSviquGyfarcbQ0"
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8568599127:AAHS8xRDcGia1Kb2MHdBpYn0m8ZFOSpI_70"
 API_ID = int(os.getenv("API_ID") or 27762756)
 API_HASH = os.getenv("API_HASH") or "4905f5337b228bec93dd37832e89b1c6"
 ADMIN_ID = int(os.getenv("ADMIN_ID") or 7690148385)
