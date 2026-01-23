@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python w2.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: API_ID
+        value: "27762756"
+      - key: API_HASH
+        value: "4905f5337b228bec93dd37832e89b1c6"
