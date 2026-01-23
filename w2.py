@@ -14,7 +14,7 @@ from telethon.errors import SessionPasswordNeededError
 # =====================================================
 # 🔐 RENDER + LOKALGA MOS SOZLAMALAR
 # =====================================================
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "LOKAL_BOT_TOKEN_BU_YERGA"
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8568599127:AAE5aWe_lp9d7bn3NqivgSviquGyfarcbQ0"
 
 API_ID = int(os.getenv("API_ID") or 27762756)
 API_HASH = os.getenv("API_HASH") or "4905f5337b228bec93dd37832e89b1c6"
