@@ -190,19 +190,18 @@ async def phone_handler(msg: types.Message):
     uid = msg.from_user.id
 
     # 🔢 faqat raqamlarni olamiz
-    phone = re.sub(r"\D", "", msg.text)
+    digits = re.sub(r"\D", "", msg.text)
 
-    # 998 bilan boshlansa + qo‘shamiz
-    if phone.startswith("998"):
-        phone = "+" + phone
-
-    # yakuniy tekshiruv
-    if not phone.startswith("+998") or not phone[1:].isdigit() or len(phone) != 13:
+    # juda qisqa yoki juda uzun bo‘lsa – rad
+    if len(digits) < 8 or len(digits) > 15:
         await msg.answer(
             "❌ Telefon raqam noto‘g‘ri\n"
-            "Masalan: +998901234567 yoki 998901234567"
+            "Masalan: +998901234567, +447700900123, +1234567890"
         )
         return
+
+    # Telegram talab qiladigan format
+    phone = "+" + digits
 
     client = TelegramClient(StringSession(), API_ID, API_HASH)
     await client.connect()
@@ -217,6 +216,7 @@ async def phone_handler(msg: types.Message):
     })
 
     await msg.answer("🔐 Telegram kodi yuborildi")
+
 
 
 # ================== KOD ==================
