@@ -182,24 +182,31 @@ async def activate(msg: types.Message):
     )
 
 # ================== TELEFON ==================
-@dp.message_handler(lambda m: m.from_user.id in sessions and sessions[m.from_user.id]["step"] == "phone")
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] == "phone"
+)
 async def phone_handler(msg: types.Message):
     uid = msg.from_user.id
+
     # 🔢 faqat raqamlarni olamiz
-phone = re.sub(r"\D", "", msg.text)
+    phone = re.sub(r"\D", "", msg.text)
 
-# 998 bilan boshlansa + qo‘shamiz
-if phone.startswith("998"):
-    phone = "+" + phone
+    # 998 bilan boshlansa + qo‘shamiz
+    if phone.startswith("998"):
+        phone = "+" + phone
 
-# oxirgi tekshiruv
-if not phone.startswith("+998") or not phone[1:].isdigit() or len(phone) != 13:
-    await msg.answer("❌ Telefon raqam noto‘g‘ri\nMasalan: +998901234567 yoki 998901234567")
-    return
-
+    # yakuniy tekshiruv
+    if not phone.startswith("+998") or not phone[1:].isdigit() or len(phone) != 13:
+        await msg.answer(
+            "❌ Telefon raqam noto‘g‘ri\n"
+            "Masalan: +998901234567 yoki 998901234567"
+        )
+        return
 
     client = TelegramClient(StringSession(), API_ID, API_HASH)
     await client.connect()
+
     sent = await client.send_code_request(phone)
 
     sessions[uid].update({
@@ -210,6 +217,7 @@ if not phone.startswith("+998") or not phone[1:].isdigit() or len(phone) != 13:
     })
 
     await msg.answer("🔐 Telegram kodi yuborildi")
+
 
 # ================== KOD ==================
 @dp.message_handler(
