@@ -1,0 +1,7 @@
+__pycache__/
+*.session
+*.zip
+chats_export/
+.env
+users.json
+config.json
