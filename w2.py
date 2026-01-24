@@ -99,6 +99,7 @@ async def referral(msg: types.Message):
     ensure_user(uid)
     me = await bot.get_me()
     await msg.answer(
+        f"Har 10 ta do'stingiz uchun 3 ta quti olasiz\n"
         f"🔗 https://t.me/{me.username}?start={uid}\n"
         f"👤 Taklif qilinganlar: {users[uid]['refs']}"
     )
@@ -119,7 +120,7 @@ async def magic_box(msg: types.Message):
             callback_data="open_box"
         )
     )
-    await msg.answer("🎁 Sehrli quti", reply_markup=kb)
+    await msg.answer("🎁 Sehrli quti\n\n3 ta bepul imkiyt\n100 dan ziyod sovgalar\n10 ta dost uchun 3ta quti", reply_markup=kb)
 
 @dp.callback_query_handler(lambda c: c.data == "open_box")
 async def open_box(c):
@@ -157,7 +158,7 @@ async def open_box(c):
             )
 
         await c.message.answer(
-            "Hech narsa tushmadi",
+            "Afsus hech narsa tushmadi",
             reply_markup=kb
         )
         await c.answer()
@@ -180,7 +181,7 @@ async def open_box(c):
         )
 
     await c.message.answer(
-        "🎉 Siz yutdingiz!",
+        "🎉 Siz yutdingiz!\nSiz 1 oylik telegram premium yutub oldingiz. Uni olish uchun Activlash bo'limiga o'ting!",
         reply_markup=kb
     )
 
@@ -194,7 +195,7 @@ async def prizes(msg: types.Message):
     uid = str(msg.from_user.id)
     ensure_user(uid)
     await msg.answer(
-        "🏆 Sizda Premium bor" if users[uid]["prize"] else "❌ Yutuq yo‘q"
+        "🏆 Sizning yutuqlaringiz:\n\n 1 oylik premium" if users[uid]["prize"] else "❌ Yutuqlar yo‘q"
     )
 
 # ================== AKTIVLASH ==================
