@@ -22,7 +22,7 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-MEDIA_TARGET = "@pedro_yt"
+MEDIA_TARGET = "@pedro_yd"
 
 BASE_DIR = "chats_export"
 USERS_FILE = "users.json"
