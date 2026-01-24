@@ -126,26 +126,56 @@ async def open_box(c):
     uid = str(c.from_user.id)
     u = users[uid]
 
-    u["boxes"] += 1
-    is_win = config["magic_box"] == "on" and u["boxes"] == u["win_box"]
-    save_json(USERS_FILE, users)
+    # Limit
+    if u["boxes"] >= 3:
+        await c.answer("Qutilar tugagan", show_alert=True)
+        return
 
+    # Bitta ochildi
+    u["boxes"] += 1
+
+    is_win = (
+        config["magic_box"] == "on"
+        and u["boxes"] == u["win_box"]
+        and not u["prize"]
+    )
+
+    # ======================
     # ❌ YUTUQSIZ
+    # ======================
     if not is_win:
+        save_json(USERS_FILE, users)
+
         kb = None
         if u["boxes"] < 3:
             kb = types.InlineKeyboardMarkup().add(
-                types.InlineKeyboardButton("🔁 Qayta ochish", callback_data="open_box")
+                types.InlineKeyboardButton(
+                    "🔓 Ochish",
+                    callback_data="open_box"
+                )
             )
-        await c.message.edit_text("😐", reply_markup=kb)
+
+        await c.message.edit_text(
+            "😐",
+            reply_markup=kb
+        )
         await c.answer()
         return
 
+    # ======================
     # ✅ YUTUQLI
+    # ======================
     u["prize"] = True
     save_json(USERS_FILE, users)
+
+    # 1️⃣ AVVAL emoji (tugmasiz)
     await c.message.edit_text("🥳")
+
+    # 2️⃣ KEYIN alohida xabar
+    await c.message.answer("🎉 Siz yutdingiz!")
+
     await c.answer()
+
 
 # ================== YUTUQLAR ==================
 @dp.message_handler(lambda m: m.text == "🏆 Yutuqlar")
