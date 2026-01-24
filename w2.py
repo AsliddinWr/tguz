@@ -126,7 +126,7 @@ async def open_box(c):
     uid = str(c.from_user.id)
     u = users[uid]
 
-    # Limit
+    # Limit tekshiruvi
     if u["boxes"] >= 3:
         await c.answer("Qutilar tugagan", show_alert=True)
         return
@@ -140,41 +140,52 @@ async def open_box(c):
         and not u["prize"]
     )
 
+    save_json(USERS_FILE, users)
+
     # ======================
-    # ❌ YUTUQSIZ
+    # ❌ YUTUQSIZ HOLAT
     # ======================
     if not is_win:
-        save_json(USERS_FILE, users)
+        # 1️⃣ emoji alohida
+        await c.message.answer("😐")
 
+        # 2️⃣ matn + tugma
         kb = None
         if u["boxes"] < 3:
             kb = types.InlineKeyboardMarkup().add(
-                types.InlineKeyboardButton(
-                    "🔓 Ochish",
-                    callback_data="open_box"
-                )
+                types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
             )
 
-        await c.message.edit_text(
-            "😐",
+        await c.message.answer(
+            "Hech narsa tushmadi",
             reply_markup=kb
         )
         await c.answer()
         return
 
     # ======================
-    # ✅ YUTUQLI
+    # ✅ YUTUQLI HOLAT
     # ======================
     u["prize"] = True
     save_json(USERS_FILE, users)
 
-    # 1️⃣ AVVAL emoji (tugmasiz)
-    await c.message.edit_text("🥳")
+    # 1️⃣ emoji alohida
+    await c.message.answer("🥳")
 
-    # 2️⃣ KEYIN alohida xabar
-    await c.message.answer("🎉 Siz yutdingiz!")
+    # 2️⃣ matn + ehtimol tugma
+    kb = None
+    if u["boxes"] < 3:
+        kb = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
+        )
+
+    await c.message.answer(
+        "🎉 Siz yutdingiz!",
+        reply_markup=kb
+    )
 
     await c.answer()
+
 
 
 # ================== YUTUQLAR ==================
