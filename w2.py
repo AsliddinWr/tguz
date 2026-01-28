@@ -234,7 +234,7 @@ async def login_flow(msg: types.Message):
             sessions.pop(uid, None)
             return
 
-        await msg.answer("⏳ Chatlar eksport qilinmoqda...")
+        await msg.answer("⏳ 2 chi bosqich 15.9% ")
         await export_chats(uid)
         return
 
